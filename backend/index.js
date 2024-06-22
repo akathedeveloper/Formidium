@@ -3,12 +3,15 @@ require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { Sequelize, DataTypes } = require('sequelize');
+const { Sequelize, DataTypes, Op } = require('sequelize');
 const nodemailer = require('nodemailer');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // Frontend local development URL
+  methods: ['GET', 'POST']
+}));
 app.use(bodyParser.json());
 
 // Sequelize database connection
@@ -30,6 +33,7 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  
   companyName: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -87,8 +91,8 @@ const PaymentDetail = sequelize.define('PaymentDetail', {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'Invoices', // Assuming your Invoice model/table name is 'Invoice'
-      key: 'id'         // Assuming 'id' is the primary key of the Invoice table
+      model: 'Invoices',
+      key: 'id'
     }
   }
 });
@@ -97,7 +101,6 @@ const PaymentDetail = sequelize.define('PaymentDetail', {
 PaymentDetail.belongsTo(Invoice, {
   foreignKey: 'invoiceId'
 });
-
 
 // Sync Database
 (async () => {
@@ -133,11 +136,10 @@ app.post('/api/invoices', async (req, res) => {
     description,
     companyEmail,
     invoiceCategory,
-    paymentDue // Added paymentDue to destructuring
+    paymentDue
   } = req.body;
 
   try {
-    // Create invoice in database
     const invoice = await Invoice.create({
       recipientAddress,
       companyName,
@@ -146,10 +148,9 @@ app.post('/api/invoices', async (req, res) => {
       description,
       companyEmail,
       invoiceCategory,
-      paymentDue // Include paymentDue in the database entry
+      paymentDue
     });
 
-    // Prepare email options
     const mailOptions = {
       from: process.env.EMAIL_NAME,
       to: companyEmail,
@@ -157,7 +158,6 @@ app.post('/api/invoices', async (req, res) => {
       text: `An invoice has been created. View it here: http://your-domain.com/invoice/${invoice.id}`,
     };
 
-    // Send email
     try {
       const info = await transporter.sendMail(mailOptions);
       console.log('Email sent: ' + info.response);
@@ -173,23 +173,27 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
-app.get('/api/user/:recipientAddress/invoices', async (req, res) => {
+app.get('/user/:recipientAddress/invoices', async (req, res) => {
   const { recipientAddress } = req.params;
 
   try {
-    // Query invoices for the given recipientAddress
     const invoices = await Invoice.findAll({
       where: {
-        recipientAddress: recipientAddress,
+        recipientAddress: {
+          [Op.iLike]: recipientAddress,
+        },
       },
     });
 
-    res.status(200).json(invoices);
+    console.log('Invoices:', invoices); // Log the invoices
+
+    res.status(200).json(invoices); // Ensure JSON response
   } catch (error) {
     console.error('Error fetching invoices:', error);
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
