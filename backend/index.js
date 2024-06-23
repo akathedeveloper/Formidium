@@ -10,7 +10,9 @@ const app = express();
 
 app.use(cors({
   origin: 'http://localhost:5173', // Frontend local development URL
-  methods: ['GET', 'POST']
+  methods: ['GET', 'POST', 'PUT'], // Allow these methods
+  allowedHeaders: ['Content-Type'], // Allow these headers
+  credentials: true, // Enable credentials
 }));
 app.use(bodyParser.json());
 
@@ -33,7 +35,11 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  
+  formidium_address:{
+    type: DataTypes.STRING,
+    allowNull:false,
+    defaultValue:'0xbcDc0883787BA970d450917724CeB73059720265',
+  },
   companyName: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -61,6 +67,11 @@ const Invoice = sequelize.define('Invoice', {
   paymentDue: {
     type: DataTypes.STRING, // Assuming paymentDue is a string for simplicity
     allowNull: false,
+  },
+  isPending:{
+    type:DataTypes.BOOLEAN,
+    allowNull:false,
+    defaultValue:true, // Default to true as invoices are pending when created
   },
 });
 
@@ -107,7 +118,7 @@ PaymentDetail.belongsTo(Invoice, {
   try {
     await sequelize.authenticate();
     console.log('Connection to the database has been established successfully.');
-    await sequelize.sync(); // Sync models with database
+    await sequelize.sync({alter:true}); // Sync models with database
   } catch (error) {
     console.error('Unable to connect to the database:', error);
   }
@@ -127,6 +138,8 @@ const transporter = nodemailer.createTransport({
 });
 
 // Routes
+
+// Create a new invoice
 app.post('/api/invoices', async (req, res) => {
   const {
     recipientAddress,
@@ -173,6 +186,7 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
+// Fetch all invoices for a recipientAddress
 app.get('/user/:recipientAddress/invoices', async (req, res) => {
   const { recipientAddress } = req.params;
 
@@ -185,15 +199,84 @@ app.get('/user/:recipientAddress/invoices', async (req, res) => {
       },
     });
 
-    console.log('Invoices:', invoices); // Log the invoices
-
-    res.status(200).json(invoices); // Ensure JSON response
+    res.status(200).json(invoices);
   } catch (error) {
     console.error('Error fetching invoices:', error);
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
 
+// Update payment details for an invoice
+app.put('/invoices/:invoiceId/payment', async (req, res) => {
+  const { invoiceId } = req.params;
+  const { amountPaid, walletAddress } = req.body;
+
+  try {
+    const invoice = await Invoice.findByPk(invoiceId);
+
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const existingPaymentDue = parseFloat(invoice.paymentDue);
+    const paymentAmount = parseFloat(amountPaid);
+
+    if (isNaN(existingPaymentDue) || isNaN(paymentAmount)) {
+      return res.status(400).json({ error: 'Invalid payment amount' });
+    }
+
+    const newPaymentDue = existingPaymentDue - paymentAmount;
+    if (newPaymentDue < 0) {
+      return res.status(400).json({ error: 'Payment exceeds the amount due' });
+    }
+
+    invoice.paymentDue = newPaymentDue.toFixed(4);
+    invoice.isPending = newPaymentDue > 0;
+    await invoice.save();
+
+    await PaymentDetail.create({
+      senderAddress: walletAddress,
+      recipientAddress: invoice.recipientAddress,
+      amountPaid: paymentAmount,
+      invoiceId: invoice.id,
+    });
+
+    res.status(200).json(invoice);
+  } catch (error) {
+    console.error('Error updating invoice paymentDue:', error);
+    res.status(500).json({ error: 'Failed to update invoice paymentDue' });
+  }
+});
+
+// Get pending invoices
+app.get('/invoices/pending', async (req, res) => {
+  try {
+    const pendingInvoices = await Invoice.findAll({
+      where: {
+        isPending: true
+      },
+    });
+    res.status(200).json(pendingInvoices);
+  } catch (error) {
+    console.error('Error fetching pending invoices:', error);
+    res.status(500).json({ error: 'Failed to fetch pending invoices' });
+  }
+});
+
+// Get completed invoices
+app.get('/invoices/completed', async (req, res) => {
+  try {
+    const completedInvoices = await Invoice.findAll({
+      where: {
+        isPending: false
+      },
+    });
+    res.status(200).json(completedInvoices);
+  } catch (error) {
+    console.error('Error fetching completed invoices:', error);
+    res.status(500).json({ error: 'Failed to fetch completed invoices' });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

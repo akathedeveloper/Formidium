@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Route, Switch, Link, useHistory } from 'react-router-dom';
-import AdminPage from './components/AdminPage.jsx';
-import MetaMaskConnect from './components/MetaMaskConnect.jsx';
-import UserInvoices from './components/UserInvoices.jsx';
+// src/App.js
+import React from 'react';
+import { BrowserRouter as Router, Route, Switch, Link } from 'react-router-dom';
+import AdminPage from './components/AdminPage';
+import MetaMaskConnect from './components/MetaMaskConnect';
+import UserInvoices from './components/UserInvoices';
 import './App.css';
 
 function App() {
-
   return (
     <Router>
       <div>
@@ -14,9 +14,7 @@ function App() {
           <Link to="/admin">Admin Page</Link>
         </nav>
         <Switch>
-          <Route exact path="/">
-            <MetaMaskConnect />
-          </Route>
+          <Route exact path="/" component={MetaMaskConnect} />
           <Route path="/admin" component={AdminPage} />
           <Route path="/user/:recipientAddress/invoices" component={UserInvoices} />
         </Switch>

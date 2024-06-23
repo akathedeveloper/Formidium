@@ -1,0 +1,11 @@
+/* src/components/UserInvoices.css */
+.invoices-container {
+    padding: 16px;
+  }
+  
+  .invoices-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  

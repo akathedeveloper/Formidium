@@ -1,0 +1,30 @@
+/* src/components/Card.css */
+.card {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 400px;
+  }
+  
+  .card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .pay-button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: flex-start;
+  }
+  
+  .pay-button:hover {
+    background-color: #0056b3;
+  }
+  

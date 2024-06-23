@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import Card from './Card';
+import '../css/UserInvoice.css';
 
 const UserInvoices = ({ match }) => {
   const { recipientAddress } = match.params;
@@ -10,15 +12,8 @@ const UserInvoices = ({ match }) => {
       try {
         console.log(`Fetching invoices for address: ${recipientAddress}`);
         const response = await fetch(`http://localhost:5000/user/${recipientAddress}/invoices`);
-
-        // Log the raw response text for debugging
-        const responseText = await response.text();
-        console.log('Raw response text:', responseText);
-
-        // Parse the response as JSON
-        const data = JSON.parse(responseText);
+        const data = await response.json();
         console.log('Parsed JSON:', data);
-
         setInvoices(data);
       } catch (error) {
         console.error('Error fetching invoices:', error);
@@ -29,25 +24,22 @@ const UserInvoices = ({ match }) => {
     fetchInvoices();
   }, [recipientAddress]);
 
+  const handlePay = (invoiceId) => {
+    setInvoices(invoices.map(inv =>
+      inv.id === invoiceId ? { ...inv, isPending: false } : inv
+    ));
+  };
+
   return (
-    <div>
+    <div className="invoices-container">
       <h1>Invoices for {recipientAddress}</h1>
       {error && <p>Error: {error}</p>}
       {invoices.length > 0 ? (
-        <ul>
+        <div className="invoices-list">
           {invoices.map((invoice) => (
-            <li key={invoice.id}>
-              <p>{invoice.id}</p>
-              <p>{invoice.paymentDue}</p>
-              <p>{invoice.description}</p>
-              <p>{invoice.companyName}</p>
-              <p>{invoice.companyEmail}</p>
-              <p>{invoice.invoiceCategory}</p>
-              <p>{invoice.recipientAddress}</p>
-              <p>{invoice.dueDate}</p>
-            </li>
+            <Card key={invoice.id} invoice={invoice} onPay={handlePay} />
           ))}
-        </ul>
+        </div>
       ) : (
         !error && <p>No invoices found.</p>
       )}
