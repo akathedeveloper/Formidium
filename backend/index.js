@@ -90,7 +90,7 @@ const PaymentDetail = sequelize.define('PaymentDetail', {
     allowNull: false,
   },
   amountPaid: {
-    type: DataTypes.DECIMAL(10, 2), // Example for amount with 2 decimal places
+    type: DataTypes.NUMERIC(10, 5), // Updated to match the database
     allowNull: false,
   },
   timestamp: {
@@ -105,8 +105,15 @@ const PaymentDetail = sequelize.define('PaymentDetail', {
       model: 'Invoices',
       key: 'id'
     }
+  },
+  transactionHash: {
+    type: DataTypes.STRING,
+    allowNull: false,
   }
 });
+
+
+
 
 // Define the association with Invoice model
 PaymentDetail.belongsTo(Invoice, {
@@ -209,12 +216,17 @@ app.get('/user/:recipientAddress/invoices', async (req, res) => {
 // Update payment details for an invoice
 app.put('/invoices/:invoiceId/payment', async (req, res) => {
   const { invoiceId } = req.params;
-  const { amountPaid, walletAddress } = req.body;
+  const { amountPaid, walletAddress, transactionHash } = req.body;
+
+  console.log('Received payment update request:', { amountPaid, walletAddress, transactionHash });
+
+  const transaction = await sequelize.transaction();
 
   try {
-    const invoice = await Invoice.findByPk(invoiceId);
+    const invoice = await Invoice.findByPk(invoiceId, { transaction });
 
     if (!invoice) {
+      console.error(`Invoice with ID ${invoiceId} not found`);
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
@@ -222,31 +234,56 @@ app.put('/invoices/:invoiceId/payment', async (req, res) => {
     const paymentAmount = parseFloat(amountPaid);
 
     if (isNaN(existingPaymentDue) || isNaN(paymentAmount)) {
+      console.error('Invalid payment amount:', { existingPaymentDue, paymentAmount });
       return res.status(400).json({ error: 'Invalid payment amount' });
     }
 
     const newPaymentDue = existingPaymentDue - paymentAmount;
     if (newPaymentDue < 0) {
+      console.error('Payment exceeds the amount due:', { newPaymentDue });
       return res.status(400).json({ error: 'Payment exceeds the amount due' });
     }
 
-    invoice.paymentDue = newPaymentDue.toFixed(4);
+    invoice.paymentDue = newPaymentDue.toFixed(5); // Adjusted to 5 decimal places
     invoice.isPending = newPaymentDue > 0;
-    await invoice.save();
 
-    await PaymentDetail.create({
+    console.log('Updated invoice details:', { paymentDue: invoice.paymentDue, isPending: invoice.isPending });
+
+    await invoice.save({ transaction });
+
+    console.log('Saving payment details:', {
       senderAddress: walletAddress,
-      recipientAddress: invoice.recipientAddress,
-      amountPaid: paymentAmount,
+      recipientAddress: invoice.formidium_address,
+      amountPaid: paymentAmount.toFixed(5), // Ensuring correct precision
       invoiceId: invoice.id,
+      transactionHash: transactionHash,
     });
 
-    res.status(200).json(invoice);
+    const paymentDetail = await PaymentDetail.create({
+      senderAddress: walletAddress,
+      recipientAddress: invoice.formidium_address,
+      amountPaid: paymentAmount.toFixed(5), // Ensuring correct precision
+      invoiceId: invoice.id,
+      transactionHash: transactionHash,
+    }, { transaction });
+
+    console.log('Payment details saved:', paymentDetail);
+
+    await transaction.commit();
+
+    res.status(200).json({ invoice, paymentId: paymentDetail.paymentId });
   } catch (error) {
-    console.error('Error updating invoice paymentDue:', error);
-    res.status(500).json({ error: 'Failed to update invoice paymentDue' });
+    await transaction.rollback();
+    console.error('Error updating invoice paymentDue:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to update invoice paymentDue', details: error.message });
   }
 });
+
+
+    
+
+
+
 
 // Get pending invoices
 app.get('/invoices/pending', async (req, res) => {

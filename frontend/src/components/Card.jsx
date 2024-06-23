@@ -19,38 +19,22 @@ const Card = ({ invoice, onPay }) => {
       console.error('Invalid payment amount');
       return;
     }
-
+  
     try {
       if (window.ethereum) {
         const web3 = new Web3(window.ethereum);
         await window.ethereum.request({ method: 'eth_requestAccounts' });
         const accounts = await web3.eth.getAccounts();
         const walletAddress = accounts[0];
-
-        console.log(`Attempting to send transaction from ${walletAddress} to ${invoice.formidium_address} with amount ${amount} ETH`);
-
-        // Check balance
-        const balance = await web3.eth.getBalance(walletAddress);
-        const balanceInEth = web3.utils.fromWei(balance, 'ether');
-        console.log(`Wallet balance: ${balanceInEth} ETH`);
-
+  
         const amountInWei = web3.utils.toWei(amount, 'ether');
-        
-        // Estimate gas fees
         const gasPrice = await web3.eth.getGasPrice();
         const gasEstimate = await web3.eth.estimateGas({
           from: walletAddress,
           to: invoice.formidium_address,
           value: amountInWei,
         });
-
-        const totalCost = BigInt(amountInWei) + BigInt(gasEstimate) * BigInt(gasPrice);
-        if (BigInt(balance) < totalCost) {
-          console.error('Insufficient funds for the transaction');
-          return;
-        }
-
-        // Send the transaction
+  
         const transaction = await web3.eth.sendTransaction({
           from: walletAddress,
           to: invoice.formidium_address,
@@ -58,26 +42,31 @@ const Card = ({ invoice, onPay }) => {
           gas: gasEstimate,
           gasPrice: gasPrice,
         });
-
-        console.log('Transaction successful:', transaction);
-
-        // Update backend with the payment details
+  
+        const transactionHash = transaction.transactionHash;
+  
         const response = await fetch(`http://localhost:5000/invoices/${invoice.id}/payment`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            amountPaid: amount,
+            amountPaid: parseFloat(amount).toFixed(5), // Ensure decimal format
             walletAddress: walletAddress,
+            transactionHash: transactionHash,
           }),
         });
-
+  
         const data = await response.json();
         console.log('Invoice updated:', data);
-
-        // Notify parent component about payment
-        onPay(invoice.id);
+  
+        if (data.error) {
+          console.error('Error updating invoice:', data.error);
+        } else {
+          console.log('Payment ID:', data.paymentId);
+          alert(`Payment successful! Payment ID: ${data.paymentId}`);
+          onPay(invoice.id);
+        }
       } else {
         console.error('MetaMask is not installed');
       }
@@ -87,6 +76,9 @@ const Card = ({ invoice, onPay }) => {
       setShowModal(false);
     }
   };
+  
+  
+  
 
   return (
     <div className="card">
